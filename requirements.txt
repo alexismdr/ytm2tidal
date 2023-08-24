@@ -1,0 +1,2 @@
+tidalapi==0.7.3
+ytmusicapi==1.2.0
