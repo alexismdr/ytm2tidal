@@ -1,2 +1,2 @@
 # Ignore every (OAuth) JSON file
-*.json
+oauth.json
