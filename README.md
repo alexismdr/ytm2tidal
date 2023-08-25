@@ -5,16 +5,16 @@ I only use Tidal to stream to particular devices (Hi-Fi audio systems, rekordbox
 ### How
 A simple, short python program performs this task. It transfers all the tracks in the "Likes" playlist on YT Music to the favorites on Tidal.
 ### Requirements
-- Python 3.9+
-- Pip 20.3.4+
+- Python 3.11+
+- Pip 23.1.2+
 ### Steps
-*Commands are given as examples for Linux with Python 3.9*
+*Commands are given as examples for Linux with Python 3.11*
 1. Open a shell
 2. Clone this repository : `git clone https://github.com/alexismdr/ytm2tidal`
 3. Go to the folder : `cd ytm2tidal`
 4. Install requirements : `pip install -r requirements.txt`
 5. Setup YouTube OAuth : `ytmusicapi oauth` (follow the instructions)
-6. Launch program : `python3.9 ytm2tidal.py`
+6. Launch program : `python3.11 ytm2tidal.py`
 7. Follow the instructions to login to Tidal
 8. Enjoy 😁
 ## Additional information
