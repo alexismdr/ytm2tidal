@@ -2,17 +2,6 @@ import re
 import tidalapi
 from ytmusicapi import YTMusic
 
-# YTMusic OAuth Login
-ytm = YTMusic("oauth.json")
-
-# Tidal OAuth Login
-session = tidalapi.Session()
-session.login_oauth_simple()
-
-# Get favorites playlists on both YTMusic and Tidal
-ytmLikedSongs = ytm.get_liked_songs(10000) # 10000 is arbitrary (needs to be high)
-favorites = tidalapi.Favorites(session, session.user.id)
-
 def searchTidalTrack(query: str) -> tidalapi.media.Track | None:
     """
     Search track on Tidal with API
@@ -25,7 +14,7 @@ def addTrackToFavorites(track: tidalapi.media.Track) -> None:
     Add a track to favorites on Tidal with API
     """
     print("➕ Track found on Tidal. Addding '" + track.name + "' by '" + track.artists[0].name + "' to favorites on Tidal")
-    favorites.add_track(track.id)
+    tidalFavorites.add_track(track.id)
 
 def searchAndAdd(title : str, artist : str=None) -> bool:
     """
@@ -71,8 +60,8 @@ def processAllTracks() :
     Process all tracks
     """
     successCounter, failureCounter = 0, 0
-    for i in range(len(ytmLikedSongs["tracks"])):
-        if processTrack(ytmLikedSongs["tracks"][i]) :
+    for i in range(min(len(ytmLikedTracks["tracks"]),ytmLikedTracksLimit)):
+        if processTrack(ytmLikedTracks["tracks"][i]) :
             successCounter += 1
             print("✅ Successfully processed track.")
         else :
@@ -80,7 +69,29 @@ def processAllTracks() :
             print("❌ Found nothing. Skipping track.")
     print("---------\n---------\n📋 Processed " + str(successCounter + failureCounter) + " tracks. (" + str(successCounter) + " succeeded / " + str(failureCounter) + " failed)")
 
-processAllTracks()
+def main():
+    """
+    Main function
+    """
+    global ytm, session, ytmLikedTracks, tidalFavorites, ytmLikedTracksLimit
+    ytm = YTMusic("oauth.json")
+    session = tidalapi.Session()
+    session.login_oauth_simple()
+    ytmLikedTracksLimit = 0
+    while True:
+        try: 
+            ytmLikedTracksLimit = int(input("How many tracks do you want to process ?\n"))
+            assert 1 <= ytmLikedTracksLimit
+            break
+        except (ValueError, AssertionError):
+            print("Input must be an integer greater than 1.")
+    ytmLikedTracks = ytm.get_liked_songs(ytmLikedTracksLimit)
+    tidalFavorites = tidalapi.Favorites(session, session.user.id)
+    processAllTracks()
+
+main()
+
+
 
 
 
