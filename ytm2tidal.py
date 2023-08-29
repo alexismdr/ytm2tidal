@@ -14,19 +14,21 @@ class ytm2tidal:
         self._successCounter, self._failureCounter = 0, 0
         self._processAllTracks()
 
-    def _tryProcessTrack(self, title: str, artist: str = None) -> bool:
+    def _tryProcessTrack(self, title: str, artists: list[str], artist: str = None) -> int:
         """
         Try to search and add a track to favorites
         """
-        if self._tidal.searchAndAddTrackToFavorites(title, artist):
-            return True
+        response = self._tidal.searchAndAddTrackToFavorites(title, artists, artist)
+        if response == 1 or response == 2 :
+            return response
         cleanTitle = re.sub("[\(\[].*?[\)\]]", "", title)
         if cleanTitle != title:
             print(
                 "⚠ Nothing found. Trying again without parentheses and brackets in title.")
-            if self._tidal.searchAndAddTrackToFavorites(cleanTitle, artist):
-                return True
-        return False
+            response = self._tidal.searchAndAddTrackToFavorites(cleanTitle, artists, artist)
+            if response == 1 or response == 2 :
+                return response
+        return 0
 
     def _processTrack(self, ytmTrackInfo: dict) -> bool:
         """
@@ -39,14 +41,22 @@ class ytm2tidal:
         if ytmTrackArtists[0] != "<No artist provided>":
             for ytmTrackArtist in ytmTrackArtists:
                 print("🏷 Trying with '" + ytmTrackArtist + "' artist name.")
-                if self._tryProcessTrack(ytmTrackInfo["title"], ytmTrackArtist):
+                response = self._tryProcessTrack(ytmTrackInfo["title"], ytmTrackArtists, ytmTrackArtist)
+                if response == 1 or response == 2 :
                     self._successCounter += 1
-                    print("✅ Successfully processed track.")
+                    if response == 1 :
+                        print("✅ Successfully processed track.")
+                    else:
+                        print("🆗 Track is already in Tidal favorites")
                     return True
         print("🏷 Trying without any artist name")
-        if self._tryProcessTrack(ytmTrackInfo["title"]):
+        response = self._tryProcessTrack(ytmTrackInfo["title"], ytmTrackArtists)
+        if response == 1 or response == 2 :
             self._successCounter += 1
-            print("✅ Successfully processed track.")
+            if response == 1 :
+                print("✅ Successfully processed track.")
+            else:
+                print("🆗 Track is already in Tidal favorites")
             return True
         self._failureCounter += 1
         print("❌ Found nothing. Skipping track.")
@@ -63,7 +73,7 @@ class ytm2tidal:
         """ with mp.Pool(processes = mp.cpu_count()) as pool:
             pool.map(self._processTrack, ytmLikedTracks) """
 
-        for likedTrack in ytmLikedTracks:
+        for likedTrack in reversed(ytmLikedTracks):
             self._processTrack(likedTrack)
         print("---------\n---------\n📋 Processed " + str(self._successCounter + self._failureCounter) +
               " tracks. (" + str(self._successCounter) + " succeeded / " + str(self._failureCounter) + " failed)")
@@ -80,7 +90,7 @@ class TidalManager(ytm2tidal):
         Search track on Tidal with API
         """
         print("🔎 Searching track on Tidal (Query : " + query + ")")
-        return self._session.search(query, [tidalapi.media.Track])["top_hit"]
+        return self._session.search(query, [tidalapi.media.Track])
 
     def _addTrackToFavorites(self, track: tidalapi.media.Track) -> None:
         """
@@ -90,16 +100,72 @@ class TidalManager(ytm2tidal):
               "' by '" + track.artists[0].name + "' to favorites on Tidal")
         self._favorites.add_track(track.id)
 
-    def searchAndAddTrackToFavorites(self, title: str, artist: str = None) -> bool:
+    def searchAndAddTrackToFavorites(self, title: str, artists : list[str], artist: str = None) -> int:
         """
         Search track and add it to favorites if found
         """
-        tidalTrack = self._searchTrack(
+        tidalSearch = self._searchTrack(
             title if artist is None else title + " " + artist)
-        if tidalTrack != None:
-            self._addTrackToFavorites(tidalTrack)
-            return True
-        return False
+        tidalTrackList = tidalSearch["tracks"]
+        if len(tidalTrackList) != 0 :
+            bestTrack = self._bestTidalSearchResult(tidalTrackList, title, artists)
+            if bestTrack.id not in [track.id for track in self._favorites.tracks()] :
+                self._addTrackToFavorites(bestTrack)
+                return 1
+            else :
+                return 2
+        return 0
+
+    def _bestTidalSearchResult(self, tracks: list[tidalapi.media.Track], title: str, artists: list[str]) -> tidalapi.media.Track:
+        """
+        Get the best Tidal search result
+        """
+        return max(self._rankTidalSearchResults(tracks, title, artists), key=lambda x:x["score"])["track"]
+
+    def _rankTidalSearchResults(self, tracks: list[tidalapi.media.Track], title: str, artists: list[str]) -> list[dict]:
+        """
+        Rank Tidal search results with a score
+        """
+        rankList = []
+        for track in tracks :
+            rankList.append({"score" : 0, "track": track})
+            if artists != ["<No artist provided>"] and len(track.artists) != 0 :
+                trackArtists = [artist.name for artist in track.artists]
+                rankList[-1]["score"] += self._rateOfCommonElements(artists, trackArtists)
+            rankList[-1]["score"] += self._rateOfCommonCharacters(title, track.full_name)
+        return rankList
+
+    def _rateOfCommonCharacters(self, string1: str, string2: str) -> float:
+        """
+        Get the rate of common characters between two strings
+        """
+        count = 0
+        if len(string1)<len(string2):
+            for i in range(len(string1)):
+                if string1[i] == string2[i]:
+                    count += 1
+            return count/len(string2)
+        else:
+            for i in range(len(string2)):
+                if string1[i] == string2[i]:
+                    count += 1
+            return count/len(string1)
+
+    def _rateOfCommonElements(self, list1: str, list2: str) -> float:
+        """
+        Get the rate of common elements between two lists
+        """
+        count = 0
+        if len(list1)<len(list2):
+            for element in list1:
+                if element in list2:
+                    count += 1
+            return count/len(list2)
+        else:
+            for element in list2:
+                if element in list1:
+                    count += 1
+            return count/len(list1)
 
     def _getFavorites(self) -> tidalapi.user.Favorites:
         """
