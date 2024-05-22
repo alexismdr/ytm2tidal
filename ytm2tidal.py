@@ -1,6 +1,13 @@
 import re
 import tidalapi
 from ytmusicapi import YTMusic as ytmusicapi
+from mutagen.flac import FLAC, Picture
+from mutagen.mp4 import MP4, MP4Cover
+import urllib.request
+from pathlib import Path
+import threading
+from time import sleep
+from re import sub
 
 """ Multiprocessing is useless because its excessive speed generates 
 a 429 error on Tidal servers (Too Many Requests for url). """
@@ -56,7 +63,7 @@ class ytm2tidal:
             if response == 1 :
                 print("✅ Successfully processed track.")
             else:
-                print("🆗 Track is already in Tidal favorites")
+                print("🆗 Track is already in Tidal favorites.")
             return True
         self._failureCounter += 1
         print("❌ Found nothing. Skipping track.")
@@ -75,15 +82,36 @@ class ytm2tidal:
 
         for likedTrack in reversed(ytmLikedTracks):
             self._processTrack(likedTrack)
+            sleep(0.6) # Avoid 429 error on Tidal servers when downloading tracks, I can't get any faster than this
+
         print("---------\n---------\n📋 Processed " + str(self._successCounter + self._failureCounter) +
               " tracks. (" + str(self._successCounter) + " succeeded / " + str(self._failureCounter) + " failed)")
 
 
 class TidalManager(ytm2tidal):
     def __init__(self):
+        self._download = self._askForDownloading()
         self._session = tidalapi.Session()
         self._session.login_oauth_simple()
+        self._session.audio_quality = tidalapi.Quality.hi_res_lossless
         self._favorites = self._getFavorites()
+
+    def _askForDownloading(self) -> bool:
+        """
+        Asks user if he wants to download the tracks
+        """
+        try:
+            answer = input("❓ Would you like to download the tracks? [Y/N]: ")
+            assert answer.lower() in ["y", "n"]
+            if answer.lower() == "y":
+                print("✅ The program will download the tracks under the ./tracks/ folder.")
+                Path("./tracks/").mkdir(parents=True, exist_ok=True)
+                return True
+            elif answer.lower() == "n":
+                print("❌ The program will not download tracks.")
+                return False
+        except (ValueError, AssertionError):
+            return self._askForDownloading()
 
     def _searchTrack(self, query: str) -> tidalapi.media.Track | None:
         """
@@ -97,7 +125,7 @@ class TidalManager(ytm2tidal):
         Add a track to favorites on Tidal with API
         """
         print("➕ Track found on Tidal. Addding '" + track.name +
-              "' by '" + track.artists[0].name + "' to favorites on Tidal")
+              "' by '" + track.artists[0].name + "' to favorites on Tidal.")
         self._favorites.add_track(track.id)
 
     def searchAndAddTrackToFavorites(self, title: str, artists : list[str], artist: str = None) -> int:
@@ -109,12 +137,53 @@ class TidalManager(ytm2tidal):
         tidalTrackList = tidalSearch["tracks"]
         if len(tidalTrackList) != 0 :
             bestTrack = self._bestTidalSearchResult(tidalTrackList, title, artists)
+            if self._download :
+                self._downloadTrack(bestTrack)
             if bestTrack.id not in [track.id for track in self._favorites.tracks()] :
                 self._addTrackToFavorites(bestTrack)
                 return 1
             else :
                 return 2
         return 0
+    
+    def _downloadTrack(self, track):
+        """
+        Download tidal track
+        """
+        print("⬇️ Downloading track (in parallel processing)")
+        trackUrl = track.get_url()
+        trackCover = track.album.image()
+        thread = threading.Thread(target=self._downloadTrackThread, args=(track.full_name, track.album.name, trackCover, [artist.name for artist in track.artists], str(track.tidal_release_date.year), trackUrl.split('.')[-1].split('?')[0] == 'flac', trackUrl))
+        thread.start()
+
+    def _downloadTrackThread(self, trackName : str, trackAlbumName : str, trackCoverUrl, trackArtists : list[str], trackReleaseYear : str, isFlac : bool, trackURL : str):
+        """
+        Download track in a thread to avoid blocking the main thread
+        """
+        filename = "./tracks/" + sub(r'[\\/:*?"<>|]', '-', trackName) + " – " + sub(r'[\\/:*?"<>|]', '-', trackArtists[0])
+        with urllib.request.urlopen(trackCoverUrl) as f:
+            cover_data = f.read()
+        if isFlac :
+            urllib.request.urlretrieve(trackURL, filename + ".flac")
+            audio = FLAC(filename + ".flac")
+            cover_picture = Picture()
+            cover_picture.data = cover_data
+            cover_picture.mime = "image/jpeg"
+            cover_picture.type = 3
+            audio.add_picture(cover_picture)
+            audio["TITLE"] = trackName
+            audio["ALBUM"] = trackAlbumName
+            audio["ARTIST"] = ", ".join(trackArtists)
+            audio["YEAR_OF_RELEASE"] = trackReleaseYear
+        else :
+            urllib.request.urlretrieve(trackURL, filename + ".m4a")
+            audio = MP4(filename + ".m4a")
+            audio["covr"] = [bytes(MP4Cover(cover_data, imageformat=MP4Cover.FORMAT_JPEG))]
+            audio["\xa9nam"] = trackName
+            audio["\xa9alb"] = trackAlbumName
+            audio["\xa9ART"] = ", ".join(trackArtists)
+            audio["\xa9day"] = trackReleaseYear
+        audio.save()
 
     def _bestTidalSearchResult(self, tracks: list[tidalapi.media.Track], title: str, artists: list[str]) -> tidalapi.media.Track:
         """
@@ -171,7 +240,7 @@ class TidalManager(ytm2tidal):
         """
         Search track and add it to favorites if found
         """
-        print("📂 Obtaining Tidal favorites tracks")
+        print("📂 Obtaining Tidal favorites tracks.")
         return tidalapi.Favorites(self._session, self._session.user.id)
 
 
@@ -193,7 +262,7 @@ class YTMusicManager(ytm2tidal):
         """
         Obtain YTMusic liked songs with API
         """
-        print("📂 Obtaining YTMusic liked tracks")
+        print("📂 Obtaining YTMusic liked tracks.")
         return self._ytm.get_liked_songs(self._likedTracksLimit)
 
     def _askForLikedTracksLimit(self) -> int:
@@ -202,11 +271,11 @@ class YTMusicManager(ytm2tidal):
         """
         try:
             self._likedTracksLimit = int(
-                input("How many tracks do you want to process ?\n"))
+                input("❓ How many tracks do you want to process ?\n"))
             assert 1 <= self._likedTracksLimit
             return self._likedTracksLimit
         except (ValueError, AssertionError):
-            print("Input must be an integer greater than 1.")
+            print("⚠️ Input must be an integer greater than 1.")
             return self._askForLikedTracksLimit()
 
 

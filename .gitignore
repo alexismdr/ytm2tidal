@@ -1,2 +1,8 @@
 # Ignore every (OAuth) JSON file
 oauth.json
+
+# Ignore tracks folder (used for downloading tracks)
+tracks/
+
+# Ignore virtual environements folder
+.venv/

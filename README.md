@@ -12,12 +12,14 @@ A simple, short python program performs this task. It transfers all the tracks i
 1. Open a shell
 2. Clone this repository : `git clone https://github.com/alexismdr/ytm2tidal`
 3. Go to the folder : `cd ytm2tidal`
-4. Install requirements : `pip install -r requirements.txt`
-5. Setup YouTube OAuth : `ytmusicapi oauth` (follow the instructions)
-6. Launch program : `python3.11 ytm2tidal.py`
-7. Follow the instructions to login to Tidal
-8. Enter the limit for the number of tracks to be processed
-9. Enjoy 😁
+4. Create virtual environement : `python -m venv .venv`
+5. Enable virtual environement : `source .venv/bin/activate`
+6. Install requirements : `pip install -r requirements.txt`
+7. Setup YouTube OAuth : `ytmusicapi oauth` (follow the instructions)
+8. Launch program : `python3.11 ytm2tidal.py`
+9. Follow the instructions to login to Tidal
+10. Enter the limit for the number of tracks to be processed
+11. Enjoy 😁
 ## Additional information
 I've posted this repository publicly because I'm thinking of improving this program in the future (e.g. choosing playlists, performing the reverse operation, adding more music platforms, creating a web interface, hosting the service myself for everyone, not using libraries, recoding the program in another language, etc.). For the time being, it will remain a very simple program, as I don't have the time to devote to such a project.
 
