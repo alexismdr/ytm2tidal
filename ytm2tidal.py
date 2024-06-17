@@ -8,6 +8,7 @@ from pathlib import Path
 import threading
 from time import sleep
 from re import sub
+import yaml
 
 """ Multiprocessing is useless because its excessive speed generates 
 a 429 error on Tidal servers (Too Many Requests for url). """
@@ -16,23 +17,31 @@ a 429 error on Tidal servers (Too Many Requests for url). """
 
 class ytm2tidal:
     def __init__(self):
+        self._config = self._openConfig()
         self._tidal = TidalManager()
         self._ytmusic = YTMusicManager("oauth.json")
         self._successCounter, self._failureCounter = 0, 0
         self._processAllTracks()
 
+    def _openConfig(self) -> dict:
+        """
+        Open config file
+        """
+        with open('config.yml', 'r') as file:
+            return yaml.safe_load(file)
+
     def _tryProcessTrack(self, title: str, artists: list[str], artist: str = None) -> int:
         """
         Try to search and add a track to favorites
         """
-        response = self._tidal.searchAndAddTrackToFavorites(title, artists, artist)
+        response = self._tidal.searchAndAddTrackToFavorites(title, artists, self._config, artist)
         if response == 1 or response == 2 :
             return response
         cleanTitle = re.sub("[\(\[].*?[\)\]]", "", title)
         if cleanTitle != title:
             print(
                 "⚠ Nothing found. Trying again without parentheses and brackets in title.")
-            response = self._tidal.searchAndAddTrackToFavorites(cleanTitle, artists, artist)
+            response = self._tidal.searchAndAddTrackToFavorites(cleanTitle, artists, self._config, artist)
             if response == 1 or response == 2 :
                 return response
         return 0
@@ -82,7 +91,7 @@ class ytm2tidal:
 
         for likedTrack in reversed(ytmLikedTracks):
             self._processTrack(likedTrack)
-            sleep(0.6) # Avoid 429 error on Tidal servers when downloading tracks, I can't get any faster than this
+            sleep(0.8) # Avoid 429 error on Tidal servers when downloading tracks, I can't get any faster than this
 
         print("---------\n---------\n📋 Processed " + str(self._successCounter + self._failureCounter) +
               " tracks. (" + str(self._successCounter) + " succeeded / " + str(self._failureCounter) + " failed)")
@@ -108,7 +117,7 @@ class TidalManager(ytm2tidal):
                 Path("./tracks/").mkdir(parents=True, exist_ok=True)
                 return True
             elif answer.lower() == "n":
-                print("❌ The program will not download tracks.")
+                print("❌ The program won't download tracks.")
                 return False
         except (ValueError, AssertionError):
             return self._askForDownloading()
@@ -128,24 +137,62 @@ class TidalManager(ytm2tidal):
               "' by '" + track.artists[0].name + "' to favorites on Tidal.")
         self._favorites.add_track(track.id)
 
-    def searchAndAddTrackToFavorites(self, title: str, artists : list[str], artist: str = None) -> int:
+    def searchAndAddTrackToFavorites(self, title: str, artists : list[str], config: dict, artist: str = None) -> int:
         """
         Search track and add it to favorites if found
         """
         tidalSearch = self._searchTrack(
             title if artist is None else title + " " + artist)
         tidalTrackList = tidalSearch["tracks"]
+        tidalTrackList = self._removeBlacklistedTracks(tidalTrackList, config['Blacklist'])
         if len(tidalTrackList) != 0 :
             bestTrack = self._bestTidalSearchResult(tidalTrackList, title, artists)
-            if self._download :
-                self._downloadTrack(bestTrack)
             if bestTrack.id not in [track.id for track in self._favorites.tracks()] :
                 self._addTrackToFavorites(bestTrack)
+                if self._download :
+                    self._downloadTrack(bestTrack)
                 return 1
             else :
+                if self._download and config["DownloadFavorites"]:
+                    self._downloadTrack(bestTrack)
                 return 2
         return 0
     
+    def _removeBlacklistedTracks(self, tracks: list[tidalapi.media.Track], blacklist: dict) -> list[tidalapi.media.Track]:
+        """
+        Remove blacklisted tracks from a list of tracks
+        """
+        if blacklist['Enabled'] :
+            clearedTracks = []
+            for track in tracks :
+                if self._isTrackArtistWhitelisted(track, blacklist) and self._isTrackStringWhitelisted(track, blacklist) :
+                    clearedTracks.append(track)
+            return clearedTracks
+        else :
+            return tracks
+        
+    def _isTrackArtistWhitelisted(self, track: tidalapi.media.Track, blacklist: dict) -> bool :
+        """
+        Check if a track isn't on the blacklist
+        """
+        if len(blacklist['Artists']) == 0 :
+            return True
+        trackArtists = [artist.name for artist in track.artists]
+        if self._rateOfCommonElements(blacklist['Artists'], trackArtists) != 0 :
+            return False
+        return True
+    
+    def _isTrackStringWhitelisted(self, track: tidalapi.media.Track, blacklist: dict) -> bool :
+        """
+        Check if every string in the blacklist isn't in the track's name
+        """
+        if len(blacklist['Strings']) == 0 :
+            return True
+        for string in blacklist['Strings'] :
+            if string in track.full_name :
+                return False
+        return True
+
     def _downloadTrack(self, track):
         """
         Download tidal track
@@ -220,7 +267,7 @@ class TidalManager(ytm2tidal):
                     count += 1
             return count/len(string1)
 
-    def _rateOfCommonElements(self, list1: str, list2: str) -> float:
+    def _rateOfCommonElements(self, list1: list, list2: list) -> float:
         """
         Get the rate of common elements between two lists
         """

@@ -1,3 +1,4 @@
 tidalapi==0.7.3
 ytmusicapi==1.2.0
 mutagen==1.47.0
+pyyaml==6.0.1
