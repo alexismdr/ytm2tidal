@@ -198,7 +198,18 @@ class TidalManager(ytm2tidal):
         Download tidal track
         """
         print("⬇️ Downloading track (in parallel processing)")
-        trackUrl = track.get_url()
+        try:
+            self._session.audio_quality = tidalapi.Quality.hi_res_lossless
+            trackUrl = track.get_url()
+        except: # We need this to fix how tidalapi handles audio quality for now (MQA/HIRES deprecated)
+            try:
+                print("❌ Can't download in FLAC HIRES audio quality, trying MQA")
+                self._session.audio_quality = tidalapi.Quality.hi_res
+                trackUrl = track.get_url()
+            except:
+                print("❌ Can't download in FLAC HIRES/MQA audio quality, trying FLAC")
+                self._session.audio_quality = tidalapi.Quality.high_lossless
+                trackUrl = track.get_url()
         trackCover = track.album.image()
         thread = threading.Thread(target=self._downloadTrackThread, args=(track.full_name, track.album.name, trackCover, [artist.name for artist in track.artists], str(track.tidal_release_date.year), trackUrl.split('.')[-1].split('?')[0] == 'flac', trackUrl))
         thread.start()
