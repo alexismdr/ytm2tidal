@@ -12,8 +12,8 @@ A simple, short python program performs this task. It transfers all the tracks i
 1. Open a shell
 2. Clone this repository : `git clone https://github.com/alexismdr/ytm2tidal`
 3. Go to the folder : `cd ytm2tidal`
-4. Create virtual environement : `python -m venv .venv`
-5. Enable virtual environement : `source .venv/bin/activate`
+4. Create virtual environment : `python -m venv .venv`
+5. Enable virtual environment : `source .venv/bin/activate`
 6. Install requirements : `pip install -r requirements.txt`
 7. Setup YouTube OAuth : `ytmusicapi oauth` (follow the instructions)
 8. Launch program : `python3.11 ytm2tidal.py`

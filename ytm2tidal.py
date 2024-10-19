@@ -133,7 +133,7 @@ class TidalManager(ytm2tidal):
         """
         Add a track to favorites on Tidal with API
         """
-        print("➕ Track found on Tidal. Addding '" + track.name +
+        print("➕ Track found on Tidal. Adding '" + track.name +
               "' by '" + track.artists[0].name + "' to favorites on Tidal.")
         self._favorites.add_track(track.id)
 
