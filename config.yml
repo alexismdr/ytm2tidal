@@ -1,4 +1,4 @@
-DownloadFavorites : true
+DownloadFavorites : false
 Blacklist:
   Enabled: true
   Strings:

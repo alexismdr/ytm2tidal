@@ -1,6 +1,8 @@
 import re
 import tidalapi
 from ytmusicapi import YTMusic as ytmusicapi
+import os
+from dotenv import load_dotenv
 from mutagen.flac import FLAC, Picture
 from mutagen.mp4 import MP4, MP4Cover
 import urllib.request
@@ -9,6 +11,7 @@ import threading
 from time import sleep
 from re import sub
 import yaml
+from ytmusicapi.auth.oauth import OAuthCredentials
 
 """ Multiprocessing is useless because its excessive speed generates 
 a 429 error on Tidal servers (Too Many Requests for url). """
@@ -202,11 +205,13 @@ class TidalManager(ytm2tidal):
             self._session.audio_quality = tidalapi.Quality.hi_res_lossless
             trackUrl = track.get_url()
         except: # We need this to fix how tidalapi handles audio quality for now (MQA/HIRES deprecated)
+            sleep(0.8) # Avoid rate limiting
             try:
                 print("❌ Can't download in FLAC HIRES audio quality, trying MQA")
                 self._session.audio_quality = tidalapi.Quality.hi_res
                 trackUrl = track.get_url()
             except:
+                sleep(0.8) # Avoid rate limiting
                 print("❌ Can't download in FLAC HIRES/MQA audio quality, trying FLAC")
                 self._session.audio_quality = tidalapi.Quality.high_lossless
                 trackUrl = track.get_url()
@@ -304,7 +309,7 @@ class TidalManager(ytm2tidal):
 
 class YTMusicManager(ytm2tidal):
     def __init__(self, oauthFile: str):
-        self._ytm = ytmusicapi(oauthFile)
+        self._ytm = ytmusicapi(oauthFile, oauth_credentials=OAuthCredentials(client_id=os.getenv('CLIEND_ID'), client_secret=os.getenv('CLIENT_SECRET')))
         self._likedTracksLimit = self._askForLikedTracksLimit()
         self._likedTracks = self._getLikedTracks()
 

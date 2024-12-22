@@ -6,3 +6,6 @@ tracks/
 
 # Ignore virtual environements folder
 .venv/
+
+# Ignore .env file
+.env
