@@ -1,4 +1,4 @@
-tidalapi==0.7.6
+tidalapi==0.8.3
 ytmusicapi==1.9.0
 mutagen==1.47.0
 pyyaml==6.0.1

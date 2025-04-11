@@ -9,7 +9,6 @@ import urllib.request
 from pathlib import Path
 import threading
 from time import sleep
-from re import sub
 import yaml
 from ytmusicapi.auth.oauth import OAuthCredentials
 
@@ -20,6 +19,7 @@ a 429 error on Tidal servers (Too Many Requests for url). """
 
 class ytm2tidal:
     def __init__(self):
+        load_dotenv()
         self._config = self._openConfig()
         self._tidal = TidalManager()
         self._ytmusic = YTMusicManager("oauth.json")
@@ -40,6 +40,13 @@ class ytm2tidal:
         response = self._tidal.searchAndAddTrackToFavorites(title, artists, self._config, artist)
         if response == 1 or response == 2 :
             return response
+        nofeatTitle = re.sub(" \( *feat\.? +[^)]+\) *", "", title)
+        if nofeatTitle != title:
+            print(
+                "⚠ Nothing found. Trying again without any featuring artists in title.")
+            response = self._tidal.searchAndAddTrackToFavorites(nofeatTitle, artists, self._config, artist)
+            if response == 1 or response == 2:
+                return response
         cleanTitle = re.sub("[\(\[].*?[\)\]]", "", title)
         if cleanTitle != title:
             print(
@@ -136,7 +143,7 @@ class TidalManager(ytm2tidal):
         """
         Add a track to favorites on Tidal with API
         """
-        print("➕ Track found on Tidal. Adding '" + track.name +
+        print("➕ Track found on Tidal. Adding '" + track.full_name +
               "' by '" + track.artists[0].name + "' to favorites on Tidal.")
         self._favorites.add_track(track.id)
 
@@ -223,7 +230,7 @@ class TidalManager(ytm2tidal):
         """
         Download track in a thread to avoid blocking the main thread
         """
-        filename = "./tracks/" + sub(r'[\\/:*?"<>|]', '-', trackName) + " – " + sub(r'[\\/:*?"<>|]', '-', trackArtists[0])
+        filename = "./tracks/" + re.sub(r'[\\/:*?"<>|]', '-', trackName) + " – " + re.sub(r'[\\/:*?"<>|]', '-', trackArtists[0])
         with urllib.request.urlopen(trackCoverUrl) as f:
             cover_data = f.read()
         if isFlac :
@@ -309,7 +316,7 @@ class TidalManager(ytm2tidal):
 
 class YTMusicManager(ytm2tidal):
     def __init__(self, oauthFile: str):
-        self._ytm = ytmusicapi(oauthFile, oauth_credentials=OAuthCredentials(client_id=os.getenv('CLIEND_ID'), client_secret=os.getenv('CLIENT_SECRET')))
+        self._ytm = ytmusicapi(oauthFile, oauth_credentials=OAuthCredentials(client_id=os.getenv('CLIENT_ID'), client_secret=os.getenv('CLIENT_SECRET')))
         self._likedTracksLimit = self._askForLikedTracksLimit()
         self._likedTracks = self._getLikedTracks()
 
